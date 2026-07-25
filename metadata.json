@@ -1,0 +1,8 @@
+{
+  "requestFramePermissions": [],
+  "name": "Remix: Teacher Tutor my sql",
+  "description": "ระบบเตรียมสอบบรรจุครูผู้ช่วยอัจฉริยะ พร้อมระบบ AI ช่วยออกข้อสอบและวิเคราะห์ผลการเรียน",
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

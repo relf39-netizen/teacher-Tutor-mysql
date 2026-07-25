@@ -1,0 +1,25 @@
+
+{
+  "name": "ระบบเตรียมตัวสอบบรรจุข้าราชการครู",
+  "short_name": "เตรียมสอบครู",
+  "description": "ระบบเตรียมตัวสอบบรรจุข้าราชการครูอัจฉริยะ ครอบคลุมภาค ก และ ภาค ข",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1e3a8a",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "https://img2.pic.in.th/photo_2026-01-02_11-42-52.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://img2.pic.in.th/photo_2026-01-02_11-42-52.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}
