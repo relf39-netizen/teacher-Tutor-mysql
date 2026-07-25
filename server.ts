@@ -185,11 +185,30 @@ const fallbackData = {
 
 // Automatic MySQL Database Schema Auto-Migration
 const autoMigrateDatabase = async (pool: mysql.Pool) => {
+  const safeQuery = async (sql: string, params: any[] = []) => {
+    try {
+      await pool.query(sql, params);
+    } catch (err: any) {
+      if (
+        err.code === "ER_DUP_KEYNAME" ||
+        err.code === "ER_DUP_FIELDNAME" ||
+        err.code === "ER_CANT_DROP_FIELD_OR_KEY" ||
+        err.code === "ER_TABLE_EXISTS_ERROR" ||
+        err.errno === 1061 ||
+        err.errno === 1060
+      ) {
+        console.log(`[Migration] Index/Column/Key already exists (${err.code || err.errno})`);
+      } else {
+        console.warn(`[Migration] Notice (${err.code || "WARN"}):`, err.message);
+      }
+    }
+  };
+
   try {
     console.log("🔄 Running Automatic Database Migration...");
     
     // 1. Schools
-    await pool.query(`
+    await safeQuery(`
       CREATE TABLE IF NOT EXISTS \`schools\` (
         \`id\` VARCHAR(64) NOT NULL,
         \`name\` VARCHAR(255) NOT NULL,
@@ -202,7 +221,7 @@ const autoMigrateDatabase = async (pool: mysql.Pool) => {
     `);
 
     // 2. Classrooms
-    await pool.query(`
+    await safeQuery(`
       CREATE TABLE IF NOT EXISTS \`classrooms\` (
         \`id\` VARCHAR(64) NOT NULL,
         \`school\` VARCHAR(255) NOT NULL,
@@ -215,7 +234,7 @@ const autoMigrateDatabase = async (pool: mysql.Pool) => {
     `);
 
     // 3. Teachers
-    await pool.query(`
+    await safeQuery(`
       CREATE TABLE IF NOT EXISTS \`teachers\` (
         \`id\` VARCHAR(64) NOT NULL,
         \`username\` VARCHAR(128) NOT NULL UNIQUE,
@@ -236,7 +255,7 @@ const autoMigrateDatabase = async (pool: mysql.Pool) => {
     `);
 
     // 4. Students
-    await pool.query(`
+    await safeQuery(`
       CREATE TABLE IF NOT EXISTS \`students\` (
         \`id\` VARCHAR(64) NOT NULL,
         \`name\` VARCHAR(255) NOT NULL,
@@ -258,7 +277,7 @@ const autoMigrateDatabase = async (pool: mysql.Pool) => {
     `);
 
     // 5. Registration Requests
-    await pool.query(`
+    await safeQuery(`
       CREATE TABLE IF NOT EXISTS \`registration_requests\` (
         \`id\` VARCHAR(64) NOT NULL,
         \`citizen_id\` VARCHAR(32) NOT NULL,
@@ -275,7 +294,7 @@ const autoMigrateDatabase = async (pool: mysql.Pool) => {
     `);
 
     // 6. Subjects
-    await pool.query(`
+    await safeQuery(`
       CREATE TABLE IF NOT EXISTS \`subjects\` (
         \`id\` VARCHAR(64) NOT NULL,
         \`name\` VARCHAR(255) NOT NULL,
@@ -293,7 +312,7 @@ const autoMigrateDatabase = async (pool: mysql.Pool) => {
     `);
 
     // 7. Assignments
-    await pool.query(`
+    await safeQuery(`
       CREATE TABLE IF NOT EXISTS \`assignments\` (
         \`id\` VARCHAR(64) NOT NULL,
         \`school\` VARCHAR(255) NOT NULL,
@@ -314,7 +333,7 @@ const autoMigrateDatabase = async (pool: mysql.Pool) => {
     `);
 
     // 8. Questions
-    await pool.query(`
+    await safeQuery(`
       CREATE TABLE IF NOT EXISTS \`questions\` (
         \`id\` VARCHAR(64) NOT NULL,
         \`subject\` VARCHAR(255) NOT NULL,
@@ -334,7 +353,7 @@ const autoMigrateDatabase = async (pool: mysql.Pool) => {
     `);
 
     // 9. Exam Results
-    await pool.query(`
+    await safeQuery(`
       CREATE TABLE IF NOT EXISTS \`exam_results\` (
         \`id\` VARCHAR(64) NOT NULL,
         \`student_id\` VARCHAR(64) NOT NULL,
@@ -352,7 +371,7 @@ const autoMigrateDatabase = async (pool: mysql.Pool) => {
     `);
 
     // Seed default admin if not exists
-    await pool.query(`
+    await safeQuery(`
       INSERT INTO \`teachers\` (\`id\`, \`username\`, \`password\`, \`name\`, \`school\`, \`role\`, \`status\`, \`position\`)
       VALUES ('teacher-super-01', 'admin', 'admin123', 'ผู้ดูแลระบบคุรุมาสเตอร์', 'ศูนย์ติวคุรุมาสเตอร์', 'SUPER_ADMIN', 'active', 'ผู้อำนวยการระบบ')
       ON DUPLICATE KEY UPDATE \`username\`=\`username\`;
