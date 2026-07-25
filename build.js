@@ -29,15 +29,17 @@ async function main() {
   console.log("✅ Client build complete (dist/)");
 
   // 2. Build Server with esbuild Programmatic API
+  const currentDir = path.resolve(process.cwd());
   await buildServer({
-    entryPoints: ['server.ts'],
+    entryPoints: [path.join(currentDir, 'server.ts')],
     bundle: true,
     platform: 'node',
     format: 'cjs',
     packages: 'external',
     sourcemap: true,
-    outfile: 'dist/server.cjs',
-    absWorkingDir: process.cwd(),
+    outfile: path.join(currentDir, 'dist', 'server.cjs'),
+    absWorkingDir: currentDir,
+    tsconfig: path.join(currentDir, 'tsconfig.json'),
   });
 
   console.log("✅ Server build complete (dist/server.cjs)");
