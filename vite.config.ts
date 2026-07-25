@@ -1,14 +1,16 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import path from 'path';
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  root: process.cwd(),
+  root: path.resolve(process.cwd()),
+  envDir: path.resolve(process.cwd()),
   server: {
     fs: {
       strict: true,
-      allow: [process.cwd()],
+      allow: [path.resolve(process.cwd())],
     },
   },
   build: {
@@ -16,3 +18,4 @@ export default defineConfig({
     emptyOutDir: true,
   },
 });
+
