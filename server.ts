@@ -4,6 +4,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import mysql from "mysql2/promise";
 import { createServer as createViteServer } from "vite";
+import react from "@vitejs/plugin-react";
 import { GoogleGenAI } from "@google/genai";
 
 dotenv.config();
@@ -638,6 +639,9 @@ app.post("/api/gemini/generate-questions", async (req, res) => {
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
+      configFile: false,
+      root: process.cwd(),
+      plugins: [react()],
       server: { middlewareMode: true },
       appType: "spa",
     });
