@@ -1,16 +1,15 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
 
-// https://vitejs.dev/config/
+// Vite configuration optimized for Windows Server / Plesk IIS environment
 export default defineConfig({
   plugins: [react()],
-  root: path.resolve(process.cwd()),
-  envDir: path.resolve(process.cwd()),
+  configFile: false,
+  root: '.',
   server: {
     fs: {
       strict: true,
-      allow: [path.resolve(process.cwd())],
+      allow: ['.'],
     },
   },
   build: {
@@ -18,4 +17,3 @@ export default defineConfig({
     emptyOutDir: true,
   },
 });
-
