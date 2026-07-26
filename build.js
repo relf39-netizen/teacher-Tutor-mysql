@@ -1,8 +1,8 @@
 import { build } from 'vite';
-import { build as buildServer } from 'esbuild';
+import { transform } from 'esbuild';
 import react from '@vitejs/plugin-react';
-import path from 'path';
 import fs from 'fs';
+import path from 'path';
 
 async function main() {
   console.log("🚀 Starting Windows Server / Plesk IIS optimized build...");
@@ -10,6 +10,8 @@ async function main() {
   const rootDir = process.cwd();
 
   // 1. Build Client with Vite Programmatic API
+  // Passing configFile: false completely bypasses Vite's config file search & esbuild config bundler.
+  // This resolves "Cannot read directory ../../../..: Access is denied" errors on IIS / Plesk.
   await build({
     configFile: false,
     root: rootDir,
@@ -29,64 +31,29 @@ async function main() {
 
   console.log("✅ Client build complete (dist/)");
 
-  // Plugin to stop esbuild from walking up directory tree on Windows Plesk / IIS
-  const iisPleskResolverPlugin = {
-    name: 'iis-plesk-resolver',
-    setup(build) {
-      // 1. Intercept all bare package imports (e.g. 'express', 'dotenv', 'mysql2/promise')
-      build.onResolve({ filter: /^[^./]/ }, (args) => {
-        return { path: args.path, external: true };
-      });
+  // 2. Build Server using esbuild transform (In-Memory String Transformation)
+  // esbuild transform operates purely on in-memory strings without searching parent directories.
+  // This completely eliminates Windows Plesk / IIS "Cannot read directory ../../../..: Access is denied" errors.
+  const serverTsPath = path.join(rootDir, 'server.ts');
+  const serverTsCode = fs.readFileSync(serverTsPath, 'utf8');
 
-      // 2. Intercept relative imports (e.g. './foo', '../bar')
-      build.onResolve({ filter: /^\./ }, (args) => {
-        const resolveDir = args.resolveDir || rootDir;
-        const targetPath = path.resolve(resolveDir, args.path);
-
-        if (fs.existsSync(targetPath) && fs.statSync(targetPath).isFile()) {
-          return { path: targetPath };
-        }
-
-        const exts = ['.ts', '.tsx', '.js', '.jsx', '.json', '/index.ts', '/index.js', '/index.tsx'];
-        for (const ext of exts) {
-          if (fs.existsSync(targetPath + ext)) {
-            return { path: targetPath + ext };
-          }
-        }
-
-        return { path: targetPath };
-      });
-    },
-  };
-
-  // 2. Build Server with esbuild Programmatic API via stdin to prevent parent directory traversal
-  await buildServer({
-    stdin: {
-      contents: fs.readFileSync(path.join(rootDir, 'server.ts'), 'utf8'),
-      resolveDir: rootDir,
-      sourcefile: 'server.ts',
-      loader: 'ts',
-    },
-    bundle: true,
-    platform: 'node',
+  const transformed = await transform(serverTsCode, {
+    loader: 'ts',
     format: 'cjs',
-    sourcemap: true,
-    outfile: path.join(rootDir, 'dist', 'server.cjs'),
-    plugins: [iisPleskResolverPlugin],
-    tsconfigRaw: JSON.stringify({
-      compilerOptions: {
-        target: 'es2022',
-        module: 'commonjs',
-        moduleResolution: 'node',
-        esModuleInterop: true,
-        allowSyntheticDefaultImports: true,
-        jsx: 'react-jsx',
-        skipLibCheck: true
-      }
-    })
+    target: 'node18',
+    sourcemap: 'inline',
   });
 
+  const distDir = path.join(rootDir, 'dist');
+  if (!fs.existsSync(distDir)) {
+    fs.mkdirSync(distDir, { recursive: true });
+  }
+
+  const distServerCjsPath = path.join(distDir, 'server.cjs');
+  fs.writeFileSync(distServerCjsPath, transformed.code, 'utf8');
+
   console.log("✅ Server build complete (dist/server.cjs)");
+  console.log("🎉 All builds completed successfully for Plesk IIS / Windows Server!");
 }
 
 main().catch((err) => {
