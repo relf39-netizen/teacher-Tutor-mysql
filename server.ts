@@ -767,7 +767,9 @@ app.post("/api/gemini/generate-questions", async (req, res) => {
 
 // Start Express Server
 async function startServer() {
-  if (process.env.NODE_ENV !== "production") {
+  const isProduction = process.env.NODE_ENV === "production";
+
+  if (!isProduction) {
     const vite = await createViteServer({
       configFile: false,
       root: process.cwd(),
@@ -784,13 +786,14 @@ async function startServer() {
     });
   }
 
-  if (process.env.PORT) {
-    app.listen(process.env.PORT, () => {
-      console.log(`🚀 Teacher Tutor Server listening on IISNode / custom PORT: ${process.env.PORT}`);
+  const listenPort = process.env.PORT || 3000;
+  if (typeof listenPort === "string" && listenPort.startsWith("\\\\")) {
+    app.listen(listenPort, () => {
+      console.log(`🚀 Teacher Tutor Server listening on IIS named pipe: ${listenPort}`);
     });
   } else {
-    app.listen(3000, "0.0.0.0", () => {
-      console.log(`🚀 Teacher Tutor Server listening on port 3000`);
+    app.listen(Number(listenPort) || 3000, "0.0.0.0", () => {
+      console.log(`🚀 Teacher Tutor Server listening on port ${listenPort}`);
     });
   }
 }
