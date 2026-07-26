@@ -6,12 +6,12 @@ import path from 'path';
 async function main() {
   console.log("🚀 Starting Windows Server / Plesk IIS optimized build...");
 
+  const rootDir = process.cwd();
+
   // 1. Build Client with Vite Programmatic API
-  // Passing configFile: false completely bypasses Vite's config file search & esbuild config bundler.
-  // This resolves "Cannot read directory ../../../..: Access is denied" errors on IIS / Plesk.
   await build({
     configFile: false,
-    root: process.cwd(),
+    root: rootDir,
     base: './',
     plugins: [react()],
     build: {
@@ -29,17 +29,28 @@ async function main() {
   console.log("✅ Client build complete (dist/)");
 
   // 2. Build Server with esbuild Programmatic API
-  const currentDir = path.resolve(process.cwd());
+  // Using tsconfigRaw prevents esbuild from recursively scanning parent directories (../../../../)
+  // for tsconfig.json on Windows IIS/Plesk environments where higher directory access is denied.
   await buildServer({
-    entryPoints: [path.join(currentDir, 'server.ts')],
+    entryPoints: ['./server.ts'],
     bundle: true,
     platform: 'node',
     format: 'cjs',
     packages: 'external',
     sourcemap: true,
-    outfile: path.join(currentDir, 'dist', 'server.cjs'),
-    absWorkingDir: currentDir,
-    tsconfig: path.join(currentDir, 'tsconfig.json'),
+    outfile: 'dist/server.cjs',
+    absWorkingDir: rootDir,
+    tsconfigRaw: JSON.stringify({
+      compilerOptions: {
+        target: 'es2022',
+        module: 'commonjs',
+        moduleResolution: 'node',
+        esModuleInterop: true,
+        allowSyntheticDefaultImports: true,
+        jsx: 'react-jsx',
+        skipLibCheck: true
+      }
+    })
   });
 
   console.log("✅ Server build complete (dist/server.cjs)");
