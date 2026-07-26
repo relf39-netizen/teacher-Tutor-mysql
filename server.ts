@@ -767,7 +767,9 @@ app.post("/api/gemini/generate-questions", async (req, res) => {
 
 // Start Express Server
 async function startServer() {
-  const isProduction = process.env.NODE_ENV === "production";
+  const distPath = path.join(process.cwd(), "dist");
+  const hasDistIndex = fs.existsSync(path.join(distPath, "index.html"));
+  const isProduction = process.env.NODE_ENV === "production" || hasDistIndex;
 
   if (!isProduction) {
     const vite = await createViteServer({
@@ -779,7 +781,6 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
