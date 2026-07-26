@@ -2,10 +2,9 @@
   "name": "smart-onet-prep",
   "private": true,
   "version": "1.0.0",
-  "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "node build.js",
+    "build": "node build.mjs",
     "start": "node dist/server.cjs",
     "lint": "eslint ."
   },
