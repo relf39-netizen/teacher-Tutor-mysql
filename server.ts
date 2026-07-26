@@ -384,9 +384,27 @@ const autoMigrateDatabase = async (pool: mysql.Pool) => {
   }
 };
 
-// Attempt MySQL connection gracefully
+// Attempt MySQL connection gracefully and auto-create database & tables
 const initMySQL = async () => {
   try {
+    // Step 1: Connect without database name to ensure database existence
+    try {
+      const rootConnection = await mysql.createConnection({
+        host: mysqlConfig.host,
+        port: mysqlConfig.port,
+        user: mysqlConfig.user,
+        password: mysqlConfig.password,
+      });
+      await rootConnection.query(
+        `CREATE DATABASE IF NOT EXISTS \`${mysqlConfig.database}\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`
+      );
+      await rootConnection.end();
+      console.log(`✅ Database \`${mysqlConfig.database}\` checked/created successfully.`);
+    } catch (dbCreateErr: any) {
+      console.warn("Notice: Database auto-creation step (root permission check):", dbCreateErr.message);
+    }
+
+    // Step 2: Create database pool targeting mysqlConfig.database
     const pool = mysql.createPool(mysqlConfig);
     const conn = await pool.getConnection();
     console.log("✅ MySQL Database Connected Successfully to", mysqlConfig.host);
@@ -394,15 +412,50 @@ const initMySQL = async () => {
     dbPool = pool;
     isMySqlConnected = true;
 
-    // Run Auto Migration
+    // Step 3: Run Auto Migration to create all 9 tables & seed defaults
     await autoMigrateDatabase(pool);
   } catch (err: any) {
-    console.warn("⚠️ MySQL Server not reachable on host (" + mysqlConfig.host + "). Operating in High-Speed Fallback Engine mode.");
+    console.warn("⚠️ MySQL Server not reachable on host (" + mysqlConfig.host + "). Operating in High-Speed Fallback Engine mode:", err.message);
     isMySqlConnected = false;
   }
 };
 
 initMySQL();
+
+// Generic helper function to upsert rows into MySQL
+async function upsertRows(pool: mysql.Pool, tableName: string, rows: any[]) {
+  if (!Array.isArray(rows) || rows.length === 0) return 0;
+  let count = 0;
+  for (const item of rows) {
+    if (!item || typeof item !== "object") continue;
+    const keys = Object.keys(item).filter((k) => item[k] !== undefined);
+    if (keys.length === 0) continue;
+
+    const escapedKeys = keys.map((k) => `\`${k}\``).join(", ");
+    const placeholders = keys.map(() => "?").join(", ");
+    const values = keys.map((k) => {
+      const val = item[k];
+      if (typeof val === "object" && val !== null) return JSON.stringify(val);
+      return val;
+    });
+
+    const updateClause = keys
+      .filter((k) => k !== "id" && k !== "citizen_id")
+      .map((k) => `\`${k}\`=VALUES(\`${k}\`)`)
+      .join(", ");
+
+    let sql = `INSERT INTO \`${tableName}\` (${escapedKeys}) VALUES (${placeholders})`;
+    if (updateClause.length > 0) {
+      sql += ` ON DUPLICATE KEY UPDATE ${updateClause}`;
+    } else {
+      sql += ` ON DUPLICATE KEY UPDATE \`${keys[0]}\`=\`${keys[0]}\``;
+    }
+
+    await pool.query(sql, values);
+    count++;
+  }
+  return count;
+}
 
 // ==========================================
 // API ROUTES
@@ -424,6 +477,83 @@ app.get("/api/db-status", (req, res) => {
     databaseName: mysqlConfig.database,
     host: mysqlConfig.host,
   });
+});
+
+// Admin Route: Auto-initialize Database & Tables
+app.post("/api/admin/init-db", async (req, res) => {
+  try {
+    await initMySQL();
+    if (isMySqlConnected && dbPool) {
+      return res.json({
+        success: true,
+        message: `สร้างและปรับปรุงโครงสร้างฐานข้อมูล MySQL (${mysqlConfig.database}) เรียบร้อยแล้ว!`,
+        connected: true,
+      });
+    } else {
+      return res.json({
+        success: false,
+        message: `ไม่สามารถเชื่อมต่อ MySQL บน ${mysqlConfig.host}:${mysqlConfig.port} ได้ กรุณาตรวจสอบการตั้งค่า MySQL หรือ XAMPP`,
+        connected: false,
+      });
+    }
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดในการสร้างฐานข้อมูล: " + err.message });
+  }
+});
+
+// Admin Route: Import Supabase / External JSON Data into MySQL
+app.post("/api/admin/import-data", async (req, res) => {
+  const { tableName, data } = req.body;
+
+  if (!data) {
+    return res.status(400).json({ success: false, message: "ไม่พบคอมพอนนต์ข้อมูลสำหรับนำเข้า" });
+  }
+
+  const resultsSummary: Record<string, number> = {};
+
+  try {
+    // 1. If MySQL is connected
+    if (isMySqlConnected && dbPool) {
+      if (tableName === "auto" || (typeof data === "object" && !Array.isArray(data))) {
+        // Multi-table import object e.g. { students: [...], questions: [...] }
+        const tables = ["schools", "classrooms", "teachers", "students", "registration_requests", "subjects", "assignments", "questions", "exam_results"];
+        for (const tbl of tables) {
+          if (Array.isArray(data[tbl]) && data[tbl].length > 0) {
+            const importedCount = await upsertRows(dbPool, tbl, data[tbl]);
+            resultsSummary[tbl] = importedCount;
+          }
+        }
+      } else if (typeof tableName === "string" && Array.isArray(data)) {
+        // Single table import
+        const importedCount = await upsertRows(dbPool, tableName, data);
+        resultsSummary[tableName] = importedCount;
+      }
+    }
+
+    // 2. Also update in-memory fallbackData so app retains imported data immediately
+    if (tableName === "auto" || (typeof data === "object" && !Array.isArray(data))) {
+      for (const [key, rows] of Object.entries(data)) {
+        if (Array.isArray(rows) && (fallbackData as any)[key]) {
+          (fallbackData as any)[key] = rows;
+          resultsSummary[key] = (resultsSummary[key] || 0) + rows.length;
+        }
+      }
+    } else if (typeof tableName === "string" && Array.isArray(data) && (fallbackData as any)[tableName]) {
+      (fallbackData as any)[tableName] = data;
+      resultsSummary[tableName] = (resultsSummary[tableName] || 0) + data.length;
+    }
+
+    const totalRows = Object.values(resultsSummary).reduce((a, b) => a + b, 0);
+
+    return res.json({
+      success: true,
+      message: `นำเข้าข้อมูลเรียบร้อยแล้ว รวมทั้งสิ้น ${totalRows} รายการ`,
+      summary: resultsSummary,
+    });
+  } catch (err: any) {
+    console.error("Import data error:", err);
+    return res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดในการนำเข้าข้อมูล: " + err.message });
+  }
 });
 
 // Fetch All App Data
@@ -654,14 +784,13 @@ async function startServer() {
     });
   }
 
-  const listenPort = process.env.PORT || 3000;
-  if (typeof listenPort === "string" && listenPort.startsWith("\\\\")) {
-    app.listen(listenPort, () => {
-      console.log(`🚀 Teacher Tutor MySQL Server listening on IIS named pipe: ${listenPort}`);
+  if (process.env.PORT) {
+    app.listen(process.env.PORT, () => {
+      console.log(`🚀 Teacher Tutor Server listening on IISNode / custom PORT: ${process.env.PORT}`);
     });
   } else {
-    app.listen(Number(listenPort) || 3000, "0.0.0.0", () => {
-      console.log(`🚀 Teacher Tutor MySQL Server listening on port ${listenPort}`);
+    app.listen(3000, "0.0.0.0", () => {
+      console.log(`🚀 Teacher Tutor Server listening on port 3000`);
     });
   }
 }
